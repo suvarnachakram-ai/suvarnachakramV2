@@ -69,13 +69,13 @@ export default function AdminDashboard() {
           <div className="w-64 bg-[#0b1220] p-4 border-r border-white/5 shadow-lg">
             <div className="flex items-center justify-between mb-6">
               <div className="font-bold text-white">Admin Menu</div>
-              <button
+              {/*<button
                 onClick={() => setSidebarOpen(false)}
                 className="text-gray-400 hover:text-white"
                 aria-label="Close menu"
               >
                 <X className="h-5 w-5" />
-              </button>
+              </button>*/}
             </div>
             <nav className="space-y-3 text-sm">
               <Link to="/admin/draws" onClick={() => setSidebarOpen(false)} className="block text-gray-300 hover:text-cyan-400">Manage Results</Link>
