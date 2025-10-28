@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Edit, Trash2, Lock, Unlock, Zap } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, EyeOff, Zap, Calendar, Search, Download } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { Draw } from '../../types';
 import { formatSlotTime, TIME_SLOTS } from '../../utils/time';
@@ -8,10 +8,24 @@ import GlassCard from '../GlassCard';
 
 export default function AdminDraws() {
   const { draws, addDraw, updateDraw, deleteDraw } = useData();
+  const [activeTab, setActiveTab] = useState<'today' | 'history'>('today');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDraw, setEditingDraw] = useState<Draw | null>(null);
+  const [inlineEditingId, setInlineEditingId] = useState<string | null>(null);
+  const [inlineEditForm, setInlineEditForm] = useState({
+    digit1: '',
+    digit2: '',
+    digit3: '',
+    digit4: '',
+    digit5: '',
+  });
   const [submitting, setSubmitting] = useState(false);
   const [publishingId, setPublishingId] = useState<string | null>(null);
+  const today = new Date().toISOString().split('T')[0];
+  const [filters, setFilters] = useState({
+    month: new Date().toISOString().slice(0, 7),
+    search: '',
+  });
   const [formData, setFormData] = useState<Omit<Draw, 'id' | 'createdAt' | 'updatedAt'>>({
     date: new Date().toISOString().split('T')[0],
     slot: '12:00',
@@ -24,28 +38,40 @@ export default function AdminDraws() {
     published: false,
   });
 
-  // avoid mutating context array
-  const sortedDraws = [...draws].sort((a, b) => 
+  const todayDraws = draws
+    .filter(draw => draw.date === today)
+    .sort((a, b) => a.slot.localeCompare(b.slot));
+
+  let historyDraws = draws.filter(draw => draw.date !== today);
+  if (filters.month) {
+    historyDraws = historyDraws.filter(draw => draw.date.startsWith(filters.month));
+  }
+  if (filters.search) {
+    const searchLower = filters.search.toLowerCase();
+    historyDraws = historyDraws.filter(draw =>
+      draw.drawNo.toLowerCase().includes(searchLower) ||
+      draw.digit1.includes(filters.search) ||
+      draw.digit2.includes(filters.search) ||
+      draw.digit3.includes(filters.search) ||
+      draw.digit4.includes(filters.search) ||
+      draw.digit5.includes(filters.search)
+    );
+  }
+  historyDraws.sort((a, b) =>
     new Date(b.date + ' ' + b.slot).getTime() - new Date(a.date + ' ' + a.slot).getTime()
   );
-  
-  // Pagination for results table
-  const [currentPage, setCurrentPage] = useState(0);
-  const rowsPerPage = 10;
-  const totalPages = Math.max(1, Math.ceil(sortedDraws.length / rowsPerPage));
-  const pagedDraws = sortedDraws.slice(currentPage * rowsPerPage, (currentPage + 1) * rowsPerPage);
-  
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    
+
     try {
       if (editingDraw) {
         await updateDraw(editingDraw.id, formData);
       } else {
         await addDraw(formData);
       }
-      
+
       setIsModalOpen(false);
       setEditingDraw(null);
       setFormData({
@@ -67,11 +93,32 @@ export default function AdminDraws() {
     }
   };
 
-  const handleEdit = (draw: Draw) => {
+  const handleInlineEdit = (draw: Draw) => {
+    setInlineEditingId(draw.id);
+    setInlineEditForm({
+      digit1: draw.digit1,
+      digit2: draw.digit2,
+      digit3: draw.digit3,
+      digit4: draw.digit4,
+      digit5: draw.digit5,
+    });
+  };
+
+  const handleSaveInlineEdit = async (drawId: string) => {
+    try {
+      await updateDraw(drawId, inlineEditForm);
+      setInlineEditingId(null);
+    } catch (error) {
+      console.error('Error updating draw:', error);
+      alert('Error updating result. Please try again.');
+    }
+  };
+
+  const handleModalEdit = (draw: Draw) => {
     setEditingDraw(draw);
     setFormData({
       date: draw.date,
-      slot: draw.slot, // <-- use actual draw.slot instead of hardcoded '12:30'
+      slot: draw.slot,
       drawNo: draw.drawNo,
       digit1: draw.digit1,
       digit2: draw.digit2,
@@ -103,6 +150,7 @@ export default function AdminDraws() {
       setPublishingId(null);
     }
   };
+
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this result?')) {
       try {
@@ -114,192 +162,330 @@ export default function AdminDraws() {
     }
   };
 
+  const exportToCSV = () => {
+    const dataToExport = activeTab === 'today' ? todayDraws : historyDraws;
+    const csvContent = [
+      ['Date', 'Time', 'Draw No', 'Digit 1', 'Digit 2', 'Digit 3', 'Digit 4', 'Digit 5', 'Status'],
+      ...dataToExport.map(draw => [
+        draw.date,
+        formatSlotTime(draw.slot),
+        draw.drawNo,
+        draw.digit1,
+        draw.digit2,
+        draw.digit3,
+        draw.digit4,
+        draw.digit5,
+        draw.published ? 'Published' : 'Draft',
+      ])
+    ].map(row => row.join(',')).join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `admin-draws-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
         <div>
-          <h1 className="text-3xl font-bold gradient-text mb-2">Manage Results</h1>
-          <p className="text-gray-300">Add, edit, and publish lottery draw results</p>
+          <h1 className="text-2xl md:text-3xl font-bold gradient-text mb-2">Manage Results</h1>
+          <p className="text-gray-300 text-sm md:text-base">Add, edit, and publish lottery draw results</p>
         </div>
         <button
           onClick={() => setIsModalOpen(true)}
-          className="btn-primary"
+          className="btn-primary w-full sm:w-auto"
         >
           <Plus className="h-4 w-4 inline mr-2" />
           Add Result
         </button>
       </div>
 
-      {/* Results Table */}
-      <GlassCard className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="border-b border-white/10">
-              <tr>
-                <th className="px-6 py-4 text-left text-sm font-medium text-gray-300">Date</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-gray-300">Time</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-gray-300">Draw No.</th>
-                <th className="px-6 py-4 text-center text-sm font-medium text-gray-300">Digit 1</th>
-                <th className="px-6 py-4 text-center text-sm font-medium text-gray-300">Digit 2</th>
-                <th className="px-6 py-4 text-center text-sm font-medium text-gray-300">Digit 3</th>
-                <th className="px-6 py-4 text-center text-sm font-medium text-gray-300">Digit 4</th>
-                <th className="px-6 py-4 text-center text-sm font-medium text-gray-300">Digit 5</th>
-        
-                <th className="px-6 py-4 text-center text-sm font-medium text-gray-300">Status</th>
-                <th className="px-6 py-4 text-center text-sm font-medium text-gray-300">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/10">
-              {sortedDraws.map((draw) => (
-                <tr key={draw.id} className="hover:bg-white/5 transition-colors">
-                  <td className="px-6 py-4 text-sm text-gray-300">
-                    {new Date(draw.date).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-cyan-400 font-medium">
-                    {formatSlotTime(draw.slot)}
-                  </td>
-                  <td className="px-6 py-4 text-sm font-medium text-white">
-                    {draw.drawNo}
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <span className="number-display">
-                      {draw.digit1}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <span className="number-display">
-                      {draw.digit2}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <span className="number-display">
-                      {draw.digit3}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <span className="number-display">
-                      {draw.digit4}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <span className="number-display">
-                      {draw.digit5}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <span className={`inline-block px-2 py-1 rounded-full text-xs ${
-                      draw.published 
-                        ? 'bg-green-500/20 text-green-400' 
-                        : 'bg-orange-500/20 text-orange-400'
-                    }`}>
-                      {draw.published ? 'Published' : 'Draft'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <div className="flex items-center justify-center space-x-2">
-                      <button
-                        onClick={() => handleEdit(draw)}
-                        className="text-yellow-400 hover:text-yellow-300"
-                        title="Edit Draw"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </button>
-                      {!draw.published && (
-                        <button
-                          onClick={() => handleQuickPublish(draw)}
-                          disabled={publishingId === draw.id}
-                          className="text-green-400 hover:text-green-300 disabled:opacity-50"
-                          title="Quick Publish"
-                        >
-                          <Zap className="h-4 w-4" />
-                        </button>
-                      )}
-                      <button
-                        onClick={() => togglePublished(draw)}
-                        className={draw.published ? 'text-orange-400 hover:text-orange-300' : 'text-green-400 hover:text-green-300'}
-                        title={draw.published ? 'Unpublish' : 'Publish'}
-                      >
-                        {draw.published ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
-                      </button>
-                      <button
-                        onClick={() => handleDelete(draw.id)}
-                        className="text-red-400 hover:text-red-300"
-                        title="Delete Draw"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {/* Tabs */}
+      <div className="flex space-x-2 mb-6">
+        <button
+          onClick={() => setActiveTab('today')}
+          className={`flex-1 sm:flex-none px-4 sm:px-6 py-3 rounded-lg font-medium transition-all ${
+            activeTab === 'today'
+              ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/50'
+              : 'bg-white/5 text-gray-400 hover:text-yellow-400 hover:bg-white/10'
+          }`}
+        >
+          Today's Draws
+        </button>
+        <button
+          onClick={() => setActiveTab('history')}
+          className={`flex-1 sm:flex-none px-4 sm:px-6 py-3 rounded-lg font-medium transition-all ${
+            activeTab === 'history'
+              ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/50'
+              : 'bg-white/5 text-gray-400 hover:text-yellow-400 hover:bg-white/10'
+          }`}
+        >
+          History
+        </button>
+      </div>
 
-        {/* Mobile list view */}
-        <div className="sm:hidden space-y-3 p-3">
-          {pagedDraws.map((draw) => (
-            <div key={draw.id} className="p-3 glass-card">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="font-medium text-white">{draw.drawNo}</div>
-                  <div className="text-sm text-gray-400">{new Date(draw.date).toLocaleDateString()} • {formatSlotTime(draw.slot)}</div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className="text-xs bg-cyan-400/20 text-cyan-400 px-2 py-1 rounded">{draw.digit1}</span>
-                  <span className="text-xs bg-yellow-400/20 text-yellow-400 px-2 py-1 rounded">{draw.digit2}</span>
-                  <span className="text-xs bg-green-400/20 text-green-400 px-2 py-1 rounded">{draw.digit3}</span>
-                  <span className="text-xs bg-purple-400/20 text-purple-400 px-2 py-1 rounded">{draw.digit4}</span>
-                  <span className="text-xs bg-pink-400/20 text-pink-400 px-2 py-1 rounded">{draw.digit5}</span>
-                </div>
+      {activeTab === 'today' ? (
+        <>
+          {/* Today's Draws - Card View */}
+          {todayDraws.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {todayDraws.map((draw) => (
+                <GlassCard key={draw.id} className="p-4 sm:p-6">
+                  {inlineEditingId === draw.id ? (
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center">
+                        <h3 className="text-base sm:text-lg font-bold text-yellow-400">{draw.drawNo}</h3>
+                        <span className="text-xs sm:text-sm text-gray-400">{formatSlotTime(draw.slot)}</span>
+                      </div>
+                      <div className="grid grid-cols-5 gap-1 sm:gap-2">
+                        {[1, 2, 3, 4, 5].map((i) => (
+                          <input
+                            key={i}
+                            type="text"
+                            maxLength={1}
+                            value={inlineEditForm[`digit${i}` as keyof typeof inlineEditForm]}
+                            onChange={(e) => setInlineEditForm(prev => ({ ...prev, [`digit${i}`]: e.target.value }))}
+                            className="input-field text-center font-mono font-bold text-sm sm:text-base"
+                          />
+                        ))}
+                      </div>
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => handleSaveInlineEdit(draw.id)}
+                          className="flex-1 btn-primary py-2 text-sm"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setInlineEditingId(null)}
+                          className="flex-1 btn-secondary py-2 text-sm"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center">
+                        <h3 className="text-base sm:text-lg font-bold text-yellow-400">{draw.drawNo}</h3>
+                        <span className="text-xs sm:text-sm text-gray-400">{formatSlotTime(draw.slot)}</span>
+                      </div>
+                      <div className="flex justify-center space-x-1 sm:space-x-2">
+                        {[draw.digit1, draw.digit2, draw.digit3, draw.digit4, draw.digit5].map((digit, idx) => (
+                          <span
+                            key={idx}
+                            className="text-xl sm:text-2xl px-2 sm:px-3 py-1 sm:py-2 min-w-[40px] sm:min-w-[48px] text-center bg-gradient-to-br from-gray-900 via-black to-gray-800 border border-yellow-600/30 rounded-lg text-yellow-200 font-mono font-bold"
+                          >
+                            {digit}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-4 border-t border-white/10 gap-3">
+                        <span className={`text-xs px-2 py-1 rounded ${draw.published ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                          {draw.published ? 'Published' : 'Draft'}
+                        </span>
+                        <div className="flex space-x-2 w-full sm:w-auto">
+                          {!draw.published && (
+                            <button
+                              onClick={() => handleQuickPublish(draw)}
+                              disabled={publishingId === draw.id}
+                              className="flex-1 sm:flex-none p-2 rounded-lg bg-green-500/10 hover:bg-green-500/20 text-green-400 hover:text-green-300 transition-colors disabled:opacity-50"
+                              title="Quick Publish"
+                            >
+                              <Zap className="h-4 w-4" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => togglePublished(draw)}
+                            className="flex-1 sm:flex-none p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-yellow-400 transition-colors"
+                            title={draw.published ? 'Unpublish' : 'Publish'}
+                          >
+                            {draw.published ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                          <button
+                            onClick={() => handleInlineEdit(draw)}
+                            className="flex-1 sm:flex-none p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-blue-400 transition-colors"
+                            title="Quick Edit"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(draw.id)}
+                            className="flex-1 sm:flex-none p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-red-400 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </GlassCard>
+              ))}
+            </div>
+          ) : (
+            <GlassCard className="p-12 text-center">
+              <div className="text-gray-400 mb-4 text-lg">No draws for today</div>
+              <p className="text-gray-500 mb-6">Add a new draw to get started</p>
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="btn-primary"
+              >
+                <Plus className="h-4 w-4 inline mr-2" />
+                Add Result
+              </button>
+            </GlassCard>
+          )}
+        </>
+      ) : (
+        <>
+          {/* History Tab - Filters */}
+          <GlassCard className="p-4 sm:p-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <Calendar className="h-4 w-4 inline mr-1" />Month
+                </label>
+                <input
+                  type="month"
+                  value={filters.month}
+                  onChange={(e) => setFilters(prev => ({ ...prev, month: e.target.value }))}
+                  className="input-field w-full"
+                />
               </div>
-              <div className="mt-3 flex items-center justify-between">
-                <div className="text-sm">
-                  <span className={`inline-block px-2 py-1 rounded-full text-xs ${draw.published ? 'bg-green-500/20 text-green-400' : 'bg-orange-500/20 text-orange-400'}`}>{draw.published ? 'Published' : 'Draft'}</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <button onClick={() => handleEdit(draw)} className="text-cyan-400 hover:text-cyan-300">Edit</button>
-                  <button onClick={() => togglePublished(draw)} className="text-yellow-400 hover:text-yellow-300">Toggle</button>
-                  <button onClick={() => handleDelete(draw.id)} className="text-red-400 hover:text-red-300">Delete</button>
-                </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <Search className="h-4 w-4 inline mr-1" />
+                  Search
+                </label>
+                <input
+                  type="text"
+                  placeholder="Draw no. or numbers..."
+                  value={filters.search}
+                  onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                  className="input-field w-full"
+                />
+              </div>
+
+              <div className="flex items-end">
+                <button
+                  onClick={exportToCSV}
+                  className="btn-primary w-full"
+                >
+                  <Download className="h-4 w-4 inline mr-2" />
+                  Export CSV
+                </button>
               </div>
             </div>
-          ))}
-        </div>
+          </GlassCard>
 
-        {/* Pagination controls */}
-        <div className="mt-4 p-4 flex items-center justify-between text-sm text-gray-300">
-          <div>
-            Showing {sortedDraws.length === 0 ? 0 : currentPage * rowsPerPage + 1} - {Math.min((currentPage + 1) * rowsPerPage, sortedDraws.length)} of {sortedDraws.length}
-          </div>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
-              disabled={currentPage === 0}
-              className="px-3 py-1 glass-card disabled:opacity-50"
-            >
-              Prev
-            </button>
-            <span className="px-2">Page {currentPage + 1} / {totalPages}</span>
-            <button
-              onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}
-              disabled={currentPage >= totalPages - 1}
-              className="px-3 py-1 glass-card disabled:opacity-50"
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      </GlassCard>
+          {/* History Table */}
+          <GlassCard className="overflow-hidden">
+            {historyDraws.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="border-b border-white/10">
+                    <tr>
+                      <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs sm:text-sm font-medium text-gray-300">Date</th>
+                      <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs sm:text-sm font-medium text-gray-300">Time</th>
+                      <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs sm:text-sm font-medium text-gray-300">Draw No.</th>
+                      <th className="px-2 sm:px-6 py-3 sm:py-4 text-center text-xs sm:text-sm font-medium text-gray-300">Numbers</th>
+                      <th className="px-3 sm:px-6 py-3 sm:py-4 text-center text-xs sm:text-sm font-medium text-gray-300">Status</th>
+                      <th className="px-3 sm:px-6 py-3 sm:py-4 text-center text-xs sm:text-sm font-medium text-gray-300">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10">
+                    {historyDraws.map((draw) => (
+                      <tr key={draw.id} className="hover:bg-white/5 transition-colors">
+                        <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-300">
+                          <div className="md:hidden">{new Date(draw.date).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })}</div>
+                          <div className="hidden md:block">{new Date(draw.date).toLocaleDateString()}</div>
+                        </td>
+                        <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-cyan-400 font-medium">
+                          {formatSlotTime(draw.slot)}
+                        </td>
+                        <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm font-medium text-white">
+                          {draw.drawNo}
+                        </td>
+                        <td className="px-2 sm:px-6 py-3 sm:py-4 text-center">
+                          <div className="flex justify-center space-x-0.5 sm:space-x-1">
+                            {[draw.digit1, draw.digit2, draw.digit3, draw.digit4, draw.digit5].map((digit, idx) => (
+                              <span key={idx} className="text-xs px-1 py-0.5 sm:px-2 sm:py-1 min-w-[20px] sm:min-w-[28px] bg-gradient-to-br from-gray-900 via-black to-gray-800 border border-yellow-600/30 rounded text-yellow-200 font-mono font-bold">
+                                {digit}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-3 sm:px-6 py-3 sm:py-4 text-center">
+                          <span className={`inline-block px-2 py-1 rounded-full text-xs ${
+                            draw.published
+                              ? 'bg-green-500/20 text-green-400'
+                              : 'bg-orange-500/20 text-orange-400'
+                          }`}>
+                            {draw.published ? 'Published' : 'Draft'}
+                          </span>
+                        </td>
+                        <td className="px-3 sm:px-6 py-3 sm:py-4 text-center">
+                          <div className="flex items-center justify-center space-x-1 sm:space-x-2">
+                            <button
+                              onClick={() => handleModalEdit(draw)}
+                              className="text-yellow-400 hover:text-yellow-300 p-1"
+                              title="Edit Draw"
+                            >
+                              <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
+                            </button>
+                            <button
+                              onClick={() => togglePublished(draw)}
+                              className={`p-1 ${draw.published ? 'text-orange-400 hover:text-orange-300' : 'text-green-400 hover:text-green-300'}`}
+                              title={draw.published ? 'Unpublish' : 'Publish'}
+                            >
+                              {draw.published ? <EyeOff className="h-3 w-3 sm:h-4 sm:w-4" /> : <Eye className="h-3 w-3 sm:h-4 sm:w-4" />}
+                            </button>
+                            <button
+                              onClick={() => handleDelete(draw.id)}
+                              className="text-red-400 hover:text-red-300 p-1"
+                              title="Delete Draw"
+                            >
+                              <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="p-12 text-center">
+                <div className="text-gray-400 mb-4 text-lg">No results found</div>
+                <p className="text-gray-500 mb-6">
+                  Try adjusting your filters or check back later
+                </p>
+                <button
+                  onClick={() => setFilters({ month: new Date().toISOString().slice(0, 7), search: '' })}
+                  className="btn-primary"
+                >
+                  Clear Filters
+                </button>
+              </div>
+            )}
+          </GlassCard>
+        </>
+      )}
 
       {/* Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <GlassCard className="w-full max-w-md p-6">
-            <h2 className="text-xl font-bold text-white mb-6">
+          <GlassCard className="w-full max-w-md p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg sm:text-xl font-bold text-white mb-4 sm:mb-6">
               {editingDraw ? 'Edit Result' : 'Add New Result'}
             </h2>
-            
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -314,7 +500,7 @@ export default function AdminDraws() {
                     required
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Time Slot
@@ -353,71 +539,21 @@ export default function AdminDraws() {
                   Winning Numbers (5 Digits)
                 </label>
                 <div className="grid grid-cols-5 gap-2">
-                  <div>
-                    <input
-                      type="text"
-                      value={formData.digit1}
-                      onChange={(e) => setFormData(prev => ({ ...prev, digit1: e.target.value }))}
-                      className="input-field w-full text-center text-xl font-bold"
-                      placeholder="0"
-                      maxLength={1}
-                      pattern="[0-9]"
-                      required
-                    />
-                    <div className="text-xs text-center text-cyan-400 mt-1">1st</div>
-                  </div>
-                  <div>
-                    <input
-                      type="text"
-                      value={formData.digit2}
-                      onChange={(e) => setFormData(prev => ({ ...prev, digit2: e.target.value }))}
-                      className="input-field w-full text-center text-xl font-bold"
-                      placeholder="0"
-                      maxLength={1}
-                      pattern="[0-9]"
-                      required
-                    />
-                    <div className="text-xs text-center text-yellow-400 mt-1">2nd</div>
-                  </div>
-                  <div>
-                    <input
-                      type="text"
-                      value={formData.digit3}
-                      onChange={(e) => setFormData(prev => ({ ...prev, digit3: e.target.value }))}
-                      className="input-field w-full text-center text-xl font-bold"
-                      placeholder="0"
-                      maxLength={1}
-                      pattern="[0-9]"
-                      required
-                    />
-                    <div className="text-xs text-center text-green-400 mt-1">3rd</div>
-                  </div>
-                  <div>
-                    <input
-                      type="text"
-                      value={formData.digit4}
-                      onChange={(e) => setFormData(prev => ({ ...prev, digit4: e.target.value }))}
-                      className="input-field w-full text-center text-xl font-bold"
-                      placeholder="0"
-                      maxLength={1}
-                      pattern="[0-9]"
-                      required
-                    />
-                    <div className="text-xs text-center text-purple-400 mt-1">4th</div>
-                  </div>
-                  <div>
-                    <input
-                      type="text"
-                      value={formData.digit5}
-                      onChange={(e) => setFormData(prev => ({ ...prev, digit5: e.target.value }))}
-                      className="input-field w-full text-center text-xl font-bold"
-                      placeholder="0"
-                      maxLength={1}
-                      pattern="[0-9]"
-                      required
-                    />
-                    <div className="text-xs text-center text-pink-400 mt-1">5th</div>
-                  </div>
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i}>
+                      <input
+                        type="text"
+                        value={formData[`digit${i}` as keyof typeof formData] as string}
+                        onChange={(e) => setFormData(prev => ({ ...prev, [`digit${i}`]: e.target.value }))}
+                        className="input-field w-full text-center text-xl font-bold"
+                        placeholder="0"
+                        maxLength={1}
+                        pattern="[0-9]"
+                        required
+                      />
+                      <div className="text-xs text-center text-gray-400 mt-1">{i}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -441,14 +577,14 @@ export default function AdminDraws() {
                     setIsModalOpen(false);
                     setEditingDraw(null);
                   }}
-                  className="px-4 py-2 text-gray-300 hover:text-white transition-colors"
+                  className="px-4 py-2 text-sm text-gray-300 hover:text-white transition-colors"
                 >
                   Cancel
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   disabled={submitting}
-                  className="btn-primary disabled:opacity-50"
+                  className="btn-primary text-sm disabled:opacity-50"
                 >
                   {submitting ? 'Saving...' : editingDraw ? 'Update' : 'Add'} Result
                 </button>
