@@ -8,15 +8,20 @@ import GlassCard from '../components/GlassCard';
 export default function Results() {
   const { draws, refreshData } = useData();
   const [filteredDraws, setFilteredDraws] = useState<Draw[]>([]);
+  const today = new Date().toISOString().split('T')[0];
   const [filters, setFilters] = useState({
     month: new Date().toISOString().slice(0, 7), // Current month (YYYY-MM)
     search: '',
+    showTodayOnly: true,
   });
 
   useEffect(() => {
     let filtered = draws.filter(draw => draw.published);
 
-    if (filters.month) {
+    // Filter for today's results only
+    if (filters.showTodayOnly) {
+      filtered = filtered.filter(draw => draw.date === today);
+    } else if (filters.month) {
       filtered = filtered.filter(draw => draw.date.startsWith(filters.month));
     }
 
@@ -106,34 +111,50 @@ export default function Results() {
 
       {/* Filters */}
       <GlassCard className="p-6 mb-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              <Calendar className="h-4 w-4 inline mr-1" />Month
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="md:col-span-4">
+            <label className="flex items-center space-x-2 text-sm font-medium text-gray-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={filters.showTodayOnly}
+                onChange={(e) => setFilters(prev => ({ ...prev, showTodayOnly: e.target.checked }))}
+                className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-yellow-500 focus:ring-yellow-500 focus:ring-offset-gray-900"
+              />
+              <span>Show Today's Results Only</span>
             </label>
-            <input
-              type="month"
-              value={filters.month}
-              onChange={(e) => setFilters(prev => ({ ...prev, month: e.target.value }))}
-              className="input-field w-full"
-            />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              <Search className="h-4 w-4 inline mr-1" />
-              Search
-            </label>
-            <input
-              type="text"
-              placeholder="Draw no. or numbers..."
-              value={filters.search}
-              onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-              className="input-field w-full"
-            />
-          </div>
-          
-          <div className="flex items-end">
+          {!filters.showTodayOnly && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <Calendar className="h-4 w-4 inline mr-1" />Month
+                </label>
+                <input
+                  type="month"
+                  value={filters.month}
+                  onChange={(e) => setFilters(prev => ({ ...prev, month: e.target.value }))}
+                  className="input-field w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <Search className="h-4 w-4 inline mr-1" />
+                  Search
+                </label>
+                <input
+                  type="text"
+                  placeholder="Draw no. or numbers..."
+                  value={filters.search}
+                  onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                  className="input-field w-full"
+                />
+              </div>
+            </>
+          )}
+
+          <div className={`flex items-end ${filters.showTodayOnly ? 'md:col-span-4' : ''}`}>
             <button
               onClick={exportToCSV}
               className="btn-primary w-full"
@@ -211,7 +232,7 @@ export default function Results() {
               Try adjusting your filters or check back later for new results
             </p>
             <button
-              onClick={() => setFilters({ month: new Date().toISOString().slice(0, 7), search: '' })}
+              onClick={() => setFilters({ month: new Date().toISOString().slice(0, 7), search: '', showTodayOnly: true })}
               className="btn-primary"
             >
               Clear Filters

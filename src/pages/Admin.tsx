@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Disc3, 
-  FileText, 
-  HelpCircle, 
-  Users, 
-  Activity, 
+import {
+  LayoutDashboard,
+  Disc3,
+  FileText,
+  HelpCircle,
+  Users,
+  Activity,
   LogOut,
   Clock,
   Trophy,
-  MessageSquare
+  MessageSquare,
+  Menu,
+  X
 } from 'lucide-react';
 import { useAdmin } from '../hooks/useAdmin';
 import AdminDraws from '../components/admin/AdminDraws';
@@ -26,6 +28,7 @@ import GlassCard from '../components/GlassCard';
 export default function Admin() {
   const { user, logout } = useAdmin();
   const location = useLocation();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const navigation = [
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
@@ -45,9 +48,24 @@ export default function Admin() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+      {/* Mobile Menu Button */}
+      <div className="lg:hidden fixed top-4 left-4 z-50">
+        <button
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className="p-2 rounded-lg bg-slate-800/90 backdrop-blur-sm border border-white/10 text-white hover:bg-slate-700/90 transition-colors"
+        >
+          {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+        </button>
+      </div>
+
       <div className="flex">
         {/* Sidebar */}
-        <div className="w-64 min-h-screen glass-card border-r border-white/10">
+        <div className={`
+          fixed lg:static inset-y-0 left-0 z-40
+          w-64 min-h-screen glass-card border-r border-white/10
+          transform transition-transform duration-300 ease-in-out
+          ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        `}>
           <div className="p-6">
             <div className="flex items-center space-x-2 mb-8">
               <div className="relative h-6 w-6">
@@ -83,6 +101,7 @@ export default function Admin() {
                   <Link
                     key={item.name}
                     to={item.href}
+                    onClick={() => setIsMobileMenuOpen(false)}
                     className={`flex items-center space-x-3 px-3 py-2 rounded-lg transition-all ${
                       isActive(item.href)
                         ? 'bg-yellow-500/20 text-yellow-400 border-l-2 border-yellow-400'
@@ -114,8 +133,16 @@ export default function Admin() {
           </div>
         </div>
 
+        {/* Overlay */}
+        {isMobileMenuOpen && (
+          <div
+            className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+        )}
+
         {/* Main Content */}
-        <div className="flex-1 p-8">
+        <div className="flex-1 p-4 sm:p-6 lg:p-8 pt-16 lg:pt-8">
           <Routes>
             <Route index element={<AdminDashboard />} />
             <Route path="timings" element={<AdminTimings />} />
