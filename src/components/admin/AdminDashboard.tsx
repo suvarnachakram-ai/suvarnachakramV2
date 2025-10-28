@@ -97,7 +97,7 @@ export default function AdminDashboard() {
           >
             <Menu className="h-5 w-5" />
           </button>
-          <div>
+          <div>*/}
             <h1 className="text-3xl font-bold gradient-text mb-2">Dashboard</h1>
             <p className="text-gray-300">Overview of lottery system status and recent activity</p>
           </div>
