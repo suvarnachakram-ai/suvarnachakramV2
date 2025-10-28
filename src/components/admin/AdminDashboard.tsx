@@ -102,7 +102,6 @@ export default function AdminDashboard() {
             <p className="text-gray-300">Overview of lottery system status and recent activity</p>
           </div>
         </div>
-      </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
