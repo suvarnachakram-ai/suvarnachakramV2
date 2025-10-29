@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X, Disc3 } from 'lucide-react';
+import NotificationBell from './NotificationBell';
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -69,16 +70,20 @@ export default function Header() {
                 {item.name}
               </Link>
             ))}
+            <NotificationBell />
           </div>
 
-          {/* Mobile menu button */}
-          <button
-            type="button"
-            className="md:hidden text-yellow-200 hover:text-yellow-400 transition-colors"
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-          >
-            {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-          </button>
+          {/* Mobile menu button and notification bell */}
+          <div className="md:hidden flex items-center gap-2">
+            <NotificationBell />
+            <button
+              type="button"
+              className="text-yellow-200 hover:text-yellow-400 transition-colors"
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+            >
+              {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            </button>
+          </div>
         </div>
 
         {/* Mobile Navigation */}

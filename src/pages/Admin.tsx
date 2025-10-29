@@ -12,7 +12,8 @@ import {
   Trophy,
   MessageSquare,
   Menu,
-  X
+  X,
+  Bell
 } from 'lucide-react';
 import { useAdmin } from '../hooks/useAdmin';
 import AdminDraws from '../components/admin/AdminDraws';
@@ -23,6 +24,7 @@ import AdminTimings from '../components/admin/AdminTimings';
 import AdminContacts from '../components/admin/AdminContacts';
 import AdminUsers from '../components/admin/AdminUsers';
 import AdminActivity from '../components/admin/AdminActivity';
+import AdminNotifications from '../components/admin/AdminNotifications';
 import GlassCard from '../components/GlassCard';
 
 export default function Admin() {
@@ -34,6 +36,7 @@ export default function Admin() {
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
     { name: 'Draw Timings', href: '/admin/timings', icon: Clock },
     { name: 'Results', href: '/admin/draws', icon: Trophy },
+    { name: 'Notifications', href: '/admin/notifications', icon: Bell },
     { name: 'News', href: '/admin/news', icon: FileText },
     { name: 'Help/FAQ', href: '/admin/faq', icon: HelpCircle },
     { name: 'Contacts', href: '/admin/contacts', icon: MessageSquare },
@@ -147,6 +150,7 @@ export default function Admin() {
             <Route index element={<AdminDashboard />} />
             <Route path="timings" element={<AdminTimings />} />
             <Route path="draws" element={<AdminDraws />} />
+            <Route path="notifications" element={<AdminNotifications />} />
             <Route path="news" element={<AdminNews />} />
             <Route path="faq" element={<AdminFAQ />} />
             <Route path="contacts" element={<AdminContacts />} />
